@@ -3,7 +3,7 @@
 // Detailed view of a single companion
 // ============================================
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,32 +11,77 @@ import {
   ScrollView,
   Image,
   TouchableOpacity,
+  ActivityIndicator,
+  Alert,
 } from 'react-native';
 
 import { colors, spacing, borderRadius, shadows, typography } from '../theme';
 import { activityTypes } from '../data/mockData';
+import hostService from '../services/hostService';
 
 export default function HostProfileScreen({ route, navigation }) {
-  // Get host data from navigation params
-  // If no data passed, use default (for testing)
-  const host = route?.params?.host || {
-    id: '1',
-    name: 'Priya Sharma',
-    age: 26,
-    photo: 'https://i.pravatar.cc/300?img=1',
-    rating: 4.9,
-    reviewCount: 47,
-    pricePerHour: 200,
-    bio: 'Love meeting new people! I\'m a photographer and travel enthusiast. Great for coffee chats, city tours, or just hanging out. I know all the best cafes in town!',
-    activities: ['coffee', 'walk', 'lunch'],
-    interests: ['Photography', 'Travel', 'Books', 'Music'],
-    languages: ['English', 'Hindi'],
-    responseTime: '< 1 hour',
-    verified: true,
+  // Get host ID from navigation params
+  const hostId = route?.params?.host?.id;
+
+  // State
+  const [host, setHost] = useState(route?.params?.host || null);
+  const [reviews, setReviews] = useState([]);
+  const [loading, setLoading] = useState(!host); // Only load if no host data passed
+
+  // ============================================
+  // FETCH HOST DATA AND REVIEWS
+  // ============================================
+
+  useEffect(() => {
+    if (hostId) {
+      fetchHostData();
+      fetchReviews();
+    }
+  }, [hostId]);
+
+  const fetchHostData = async () => {
+    try {
+      console.log('📥 Fetching host details:', hostId);
+      const data = await hostService.getHostById(hostId);
+      console.log('✅ Fetched host data:', data.name);
+      setHost(data);
+    } catch (error) {
+      console.error('❌ Failed to fetch host:', error);
+      Alert.alert('Error', 'Failed to load host profile. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  // Use larger photo for hero
-  const heroPhoto = host.photo.replace('150', '300');
+  const fetchReviews = async () => {
+    try {
+      console.log('📥 Fetching reviews for host:', hostId);
+      const data = await hostService.getHostReviews(hostId);
+      console.log('✅ Fetched reviews:', data.length);
+      setReviews(data);
+    } catch (error) {
+      console.error('❌ Failed to fetch reviews:', error);
+      // Don't show alert for reviews - not critical
+    }
+  };
+
+  // ============================================
+  // LOADING STATE
+  // ============================================
+
+  if (loading || !host) {
+    return (
+      <View style={[styles.container, styles.centerContent]}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading profile...</Text>
+      </View>
+    );
+  }
+
+  // Get photo - handle both base64 and URL
+  const heroPhoto = host.photo_base64
+    ? `data:image/jpeg;base64,${host.photo_base64}`
+    : host.photo || 'https://via.placeholder.com/400x400?text=No+Photo';
 
   return (
     <View style={styles.container}>
@@ -67,7 +112,7 @@ export default function HostProfileScreen({ route, navigation }) {
 
           {/* Price Badge */}
           <View style={styles.heroPriceBadge}>
-            <Text style={styles.heroPriceText}>₹{host.pricePerHour}</Text>
+            <Text style={styles.heroPriceText}>₹{host.price_per_hour || host.pricePerHour}</Text>
             <Text style={styles.heroPriceUnit}>/hour</Text>
           </View>
         </View>
@@ -90,12 +135,12 @@ export default function HostProfileScreen({ route, navigation }) {
           {/* Rating and Response Time */}
           <View style={styles.statsRow}>
             <View style={styles.stat}>
-              <Text style={styles.statValue}>⭐ {host.rating}</Text>
-              <Text style={styles.statLabel}>{host.reviewCount} reviews</Text>
+              <Text style={styles.statValue}>⭐ {host.rating ? host.rating.toFixed(1) : 'New'}</Text>
+              <Text style={styles.statLabel}>{host.review_count || host.reviewCount || 0} reviews</Text>
             </View>
             <View style={styles.statDivider} />
             <View style={styles.stat}>
-              <Text style={styles.statValue}>⚡ {host.responseTime}</Text>
+              <Text style={styles.statValue}>⚡ {host.response_time || host.responseTime || '< 1 hour'}</Text>
               <Text style={styles.statLabel}>response</Text>
             </View>
           </View>
@@ -157,32 +202,36 @@ export default function HostProfileScreen({ route, navigation }) {
           </View>
 
           {/* Reviews Preview */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Reviews</Text>
-            <View style={styles.reviewCard}>
-              <View style={styles.reviewHeader}>
-                <Image
-                  source={{ uri: 'https://i.pravatar.cc/50?img=15' }}
-                  style={styles.reviewerPhoto}
-                />
-                <View>
-                  <Text style={styles.reviewerName}>Amit K.</Text>
-                  <Text style={styles.reviewDate}>2 weeks ago</Text>
+          {reviews.length > 0 && (
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Reviews</Text>
+              <View style={styles.reviewCard}>
+                <View style={styles.reviewHeader}>
+                  <Image
+                    source={{ uri: 'https://i.pravatar.cc/50?img=' + (reviews[0].id % 70) }}
+                    style={styles.reviewerPhoto}
+                  />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.reviewerName}>{reviews[0].reviewer_name}</Text>
+                    <Text style={styles.reviewDate}>{new Date(reviews[0].created_at).toLocaleDateString()}</Text>
+                  </View>
+                  <Text style={styles.reviewRating}>⭐ {reviews[0].rating.toFixed(1)}</Text>
                 </View>
-                <Text style={styles.reviewRating}>⭐ 5.0</Text>
+                <Text style={styles.reviewText}>
+                  {reviews[0].comment}
+                </Text>
               </View>
-              <Text style={styles.reviewText}>
-                Had a great time! Priya is very friendly and knows all the best coffee spots. Highly recommend!
-              </Text>
-            </View>
 
-            <TouchableOpacity
-              style={styles.seeAllButton}
-              onPress={() => navigation.navigate('AllReviews', { host })}
-            >
-              <Text style={styles.seeAllText}>See all {host.reviewCount} reviews →</Text>
-            </TouchableOpacity>
-          </View>
+              {reviews.length > 1 && (
+                <TouchableOpacity
+                  style={styles.seeAllButton}
+                  onPress={() => navigation.navigate('AllReviews', { host, reviews })}
+                >
+                  <Text style={styles.seeAllText}>See all {reviews.length} reviews →</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
 
           {/* Spacing for bottom button */}
           <View style={{ height: 100 }} />
@@ -195,7 +244,7 @@ export default function HostProfileScreen({ route, navigation }) {
       {/* ============================================ */}
       <View style={styles.bottomBar}>
         <View style={styles.bottomPrice}>
-          <Text style={styles.bottomPriceAmount}>₹{host.pricePerHour}</Text>
+          <Text style={styles.bottomPriceAmount}>₹{host.price_per_hour || host.pricePerHour}</Text>
           <Text style={styles.bottomPriceUnit}>/hour</Text>
         </View>
 
@@ -222,6 +271,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background,
+  },
+
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.body,
+    color: colors.text.secondary,
   },
 
   // Hero Section

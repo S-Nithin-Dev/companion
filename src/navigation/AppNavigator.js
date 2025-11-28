@@ -4,12 +4,18 @@
 // ============================================
 
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
 // React Navigation imports
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 
+// Auth Context
+import { useAuth } from '../context/AuthContext';
+
 // Import all our screens
+import LoginScreen from '../screens/LoginScreen';
+import SignupScreen from '../screens/SignupScreen';
 import HomeScreen from '../screens/HomeScreen';
 import BrowseCompanionsScreen from '../screens/BrowseCompanionsScreen';
 import HostProfileScreen from '../screens/HostProfileScreen';
@@ -43,16 +49,22 @@ import { colors, typography } from '../theme';
 const Stack = createNativeStackNavigator();
 
 export default function AppNavigator() {
-  return (
-    // NavigationContainer wraps everything
-    // It manages the navigation state
-    <NavigationContainer>
+  const { isAuthenticated, loading } = useAuth();
 
-      {/* Stack.Navigator contains all the screens */}
+  // Show loading while checking auth status
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator size="large" color={colors.primary} />
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer>
       <Stack.Navigator
-        initialRouteName="Home"  // First screen to show
+        initialRouteName={isAuthenticated ? "Home" : "Login"}
         screenOptions={{
-          // Default options for all screens
           headerStyle: {
             backgroundColor: colors.background,
           },
@@ -61,28 +73,46 @@ export default function AppNavigator() {
             fontWeight: 'bold',
             fontSize: typography.h3,
           },
-          headerShadowVisible: false,  // Remove header shadow
-          headerBackTitleVisible: false, // Hide back button text (iOS)
+          headerShadowVisible: false,
+          headerBackTitleVisible: false,
         }}
       >
 
         {/* ============================================ */}
-        {/* DEFINE EACH SCREEN */}
+        {/* AUTH SCREENS (shown when not logged in) */}
         {/* ============================================ */}
 
-        {/* Home Screen */}
-        <Stack.Screen
-          name="Home"
-          component={HomeScreen}
-          options={{
-            headerShown: false,  // Hide header on home
-          }}
-        />
-        {/*
-          name = unique identifier for navigation
-          component = the screen component to render
-          options = screen-specific settings
-        */}
+        {!isAuthenticated ? (
+          <>
+            <Stack.Screen
+              name="Login"
+              component={LoginScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+
+            <Stack.Screen
+              name="Signup"
+              component={SignupScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
+          </>
+        ) : (
+          <>
+            {/* ============================================ */}
+            {/* MAIN APP SCREENS (shown when logged in) */}
+            {/* ============================================ */}
+
+            <Stack.Screen
+              name="Home"
+              component={HomeScreen}
+              options={{
+                headerShown: false,
+              }}
+            />
 
         {/* Browse Companions Screen */}
         <Stack.Screen
@@ -237,6 +267,9 @@ export default function AppNavigator() {
             title: 'Terms & Privacy',
           }}
         />
+
+          </>
+        )}
 
       </Stack.Navigator>
     </NavigationContainer>

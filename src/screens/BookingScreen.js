@@ -13,19 +13,27 @@ import {
   TextInput,
   Image,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, spacing, borderRadius, shadows, typography } from '../theme';
 import { activityTypes } from '../data/mockData';
+import { useAuth } from '../context/AuthContext';
+
+// Import service - we'll create bookingService
+import api from '../services/api';
 
 export default function BookingScreen({ route, navigation }) {
+  const { user } = useAuth();
+
   // Get host data from navigation
   const host = route?.params?.host || {
     id: '1',
     name: 'Priya Sharma',
     photo: 'https://i.pravatar.cc/150?img=1',
     pricePerHour: 200,
+    price_per_hour: 200,
     activities: ['coffee', 'walk', 'lunch'],
   };
 
@@ -37,50 +45,74 @@ export default function BookingScreen({ route, navigation }) {
   const [duration, setDuration] = useState(2);  // Default 2 hours
   const [location, setLocation] = useState('');
   const [notes, setNotes] = useState('');
+  const [loading, setLoading] = useState(false);
 
   // ============================================
   // CALCULATED VALUES
   // ============================================
 
   // Total price = hourly rate × duration
-  const totalPrice = host.pricePerHour * duration;
+  const pricePerHour = host.price_per_hour || host.pricePerHour;
+  const totalPrice = pricePerHour * duration;
 
   // Check if form is valid (location is required)
-  const isFormValid = location.trim().length > 0;
+  const isFormValid = location.trim().length > 0 && !loading;
 
   // ============================================
   // HANDLE BOOKING SUBMISSION
   // ============================================
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!isFormValid) {
       Alert.alert('Missing Information', 'Please enter a meeting location');
       return;
     }
 
-    // In real app, this would send to backend
-    const bookingData = {
-      hostId: host.id,
-      activity: selectedActivity,
-      duration: duration,
-      location: location,
-      notes: notes,
-      totalPrice: totalPrice,
-    };
+    setLoading(true);
 
-    console.log('Booking submitted:', bookingData);
+    try {
+      console.log('📝 Creating booking...');
 
-    // Show success message
-    Alert.alert(
-      'Request Sent! 🎉',
-      `Your booking request has been sent to ${host.name}. They'll respond soon!`,
-      [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('Home'),
-        },
-      ]
-    );
+      // Get current date and time
+      const now = new Date();
+      const bookingDate = now.toISOString().split('T')[0]; // YYYY-MM-DD
+      const bookingTime = now.toTimeString().split(' ')[0].substring(0, 5); // HH:MM
+
+      // Prepare booking data for API
+      const bookingData = {
+        host_id: host.id,
+        booking_date: bookingDate,
+        booking_time: bookingTime,
+        duration_hours: duration,
+        activity_type: selectedActivity,
+        location: location,
+        notes: notes,
+      };
+
+      console.log('Booking data:', bookingData);
+
+      // Submit to API
+      const response = await api.post('/bookings', bookingData);
+      console.log('✅ Booking created:', response.data);
+
+      // Show success message
+      Alert.alert(
+        'Request Sent!',
+        `Your booking request has been sent to ${host.name}. They'll respond soon!`,
+        [
+          {
+            text: 'OK',
+            onPress: () => navigation.navigate('Home'),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Booking failed:', error);
+      const errorMessage = error.response?.data?.error || 'Failed to create booking. Please try again.';
+      Alert.alert('Booking Failed', errorMessage);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // ============================================
@@ -112,10 +144,17 @@ export default function BookingScreen({ route, navigation }) {
 
         {/* Host Info Card */}
         <View style={styles.hostCard}>
-          <Image source={{ uri: host.photo }} style={styles.hostPhoto} />
+          <Image
+            source={{
+              uri: host.photo_base64
+                ? `data:image/jpeg;base64,${host.photo_base64}`
+                : host.photo || 'https://via.placeholder.com/100x100?text=No+Photo'
+            }}
+            style={styles.hostPhoto}
+          />
           <View style={styles.hostInfo}>
             <Text style={styles.hostName}>{host.name}</Text>
-            <Text style={styles.hostPrice}>₹{host.pricePerHour}/hour</Text>
+            <Text style={styles.hostPrice}>₹{pricePerHour}/hour</Text>
           </View>
         </View>
 
@@ -218,7 +257,7 @@ export default function BookingScreen({ route, navigation }) {
           <View style={styles.priceCard}>
             <View style={styles.priceRow}>
               <Text style={styles.priceLabel}>
-                ₹{host.pricePerHour} × {duration} hour{duration > 1 ? 's' : ''}
+                ₹{pricePerHour} × {duration} hour{duration > 1 ? 's' : ''}
               </Text>
               <Text style={styles.priceValue}>₹{totalPrice}</Text>
             </View>
@@ -252,9 +291,13 @@ export default function BookingScreen({ route, navigation }) {
           onPress={handleSubmit}
           disabled={!isFormValid}
         >
-          <Text style={styles.submitButtonText}>
-            Send Request • ₹{totalPrice}
-          </Text>
+          {loading ? (
+            <ActivityIndicator color={colors.white} />
+          ) : (
+            <Text style={styles.submitButtonText}>
+              Send Request • ₹{totalPrice}
+            </Text>
+          )}
         </TouchableOpacity>
         </View>
 

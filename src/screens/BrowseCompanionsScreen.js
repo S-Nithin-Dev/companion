@@ -3,7 +3,7 @@
 // Shows list of available companions to book
 // ============================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,20 +12,61 @@ import {
   Image,
   TouchableOpacity,
   TextInput,
+  ActivityIndicator,
+  RefreshControl,
+  Alert,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, spacing, borderRadius, shadows, typography } from '../theme';
-import { hosts, activityTypes } from '../data/mockData';
+import { activityTypes } from '../data/mockData';
+import hostService from '../services/hostService';
 
 export default function BrowseCompanionsScreen({ route, navigation }) {
 
   // Get activity filter from navigation params (if any)
   const initialActivity = route?.params?.activityFilter || 'all';
 
+  // State for data
+  const [hosts, setHosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
   // State for search and filter
   const [searchText, setSearchText] = useState('');
   const [selectedActivity, setSelectedActivity] = useState(initialActivity);
+
+  // ============================================
+  // FETCH HOSTS FROM API
+  // ============================================
+
+  useEffect(() => {
+    fetchHosts();
+  }, []);
+
+  const fetchHosts = async () => {
+    try {
+      console.log('📥 Fetching hosts from API...');
+      const data = await hostService.getAllHosts();
+      console.log('✅ Fetched hosts:', data.length);
+      setHosts(data);
+    } catch (error) {
+      console.error('❌ Failed to fetch hosts:', error);
+      Alert.alert(
+        'Error',
+        'Failed to load companions. Please try again.',
+        [{ text: 'Retry', onPress: fetchHosts }]
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchHosts();
+    setRefreshing(false);
+  };
 
   // ============================================
   // FILTER HOSTS based on search and activity
@@ -67,17 +108,21 @@ export default function BrowseCompanionsScreen({ route, navigation }) {
       >
         {/* Host Photo */}
         <Image
-          source={{ uri: item.photo }}
+          source={{
+            uri: item.photo_base64
+              ? `data:image/jpeg;base64,${item.photo_base64}`
+              : item.photo || 'https://via.placeholder.com/400x400?text=No+Photo'
+          }}
           style={styles.hostPhoto}
         />
         {/*
-          source={{ uri: 'url' }} loads image from URL
-          For local images: source={require('./image.png')}
+          Handles both base64 encoded images from API and URL fallback
+          Base64 format: data:image/jpeg;base64,{base64string}
         */}
 
         {/* Price Badge - positioned absolute in top right */}
         <View style={styles.priceBadge}>
-          <Text style={styles.priceText}>₹{item.pricePerHour}/hr</Text>
+          <Text style={styles.priceText}>₹{item.price_per_hour || item.pricePerHour}/hr</Text>
         </View>
 
         {/* Host Info */}
@@ -91,7 +136,7 @@ export default function BrowseCompanionsScreen({ route, navigation }) {
           <View style={styles.ratingRow}>
             <Text style={styles.ratingStar}>⭐</Text>
             <Text style={styles.ratingText}>
-              {item.rating} ({item.reviewCount})
+              {item.rating ? item.rating.toFixed(1) : 'New'} {item.review_count || item.reviewCount ? `(${item.review_count || item.reviewCount})` : ''}
             </Text>
             {item.verified && (
               <View style={styles.verifiedBadge}>
@@ -124,6 +169,21 @@ export default function BrowseCompanionsScreen({ route, navigation }) {
   // ============================================
   // MAIN RENDER
   // ============================================
+
+  // Show loading on initial fetch
+  if (loading) {
+    return (
+      <LinearGradient
+        colors={['#FDF1F8', '#FFF9F5', '#F3E9FF']}
+        style={styles.gradient}
+      >
+        <View style={[styles.container, styles.centerContent]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={styles.loadingText}>Loading companions...</Text>
+        </View>
+      </LinearGradient>
+    );
+  }
 
   return (
     <LinearGradient
@@ -196,6 +256,15 @@ export default function BrowseCompanionsScreen({ route, navigation }) {
         keyExtractor={item => item.id}
         contentContainerStyle={styles.listContent}
         showsVerticalScrollIndicator={false}
+        // Pull to refresh
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        }
         // Empty state when no results
         ListEmptyComponent={
           <View style={styles.emptyState}>
@@ -215,6 +284,7 @@ export default function BrowseCompanionsScreen({ route, navigation }) {
         - data: the array to render
         - renderItem: function that returns element for each item
         - keyExtractor: function that returns unique key for each item
+        - refreshControl: enables pull-to-refresh functionality
         - ListEmptyComponent: what to show when list is empty
       */}
 
@@ -234,6 +304,17 @@ const styles = StyleSheet.create({
 
   container: {
     flex: 1,
+  },
+
+  centerContent: {
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  loadingText: {
+    marginTop: spacing.md,
+    fontSize: typography.body,
+    color: colors.text.secondary,
   },
 
   safeArea: {
