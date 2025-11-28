@@ -19,7 +19,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useFocusEffect } from '@react-navigation/native';
 
 import { colors, spacing, borderRadius, shadows, typography } from '../theme';
-import { AuthContext } from '../context/AuthContext';
+import AuthContext from '../context/AuthContext';
 import hostService from '../services/hostService';
 
 export default function ProfileScreen({ navigation }) {
