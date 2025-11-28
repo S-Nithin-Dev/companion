@@ -155,8 +155,9 @@ export default function HostProfileScreen({ route, navigation }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Activities</Text>
             <View style={styles.tagsContainer}>
-              {host.activities.map(activityId => {
-                const activity = activityTypes.find(a => a.id === activityId);
+              {host.activities && host.activities.map(activityObj => {
+                const activityId = activityObj.id || activityObj;
+                const activity = activityObj.name ? activityObj : activityTypes.find(a => a.id === activityId);
                 return (
                   <View
                     key={activityId}
@@ -175,7 +176,7 @@ export default function HostProfileScreen({ route, navigation }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Interests</Text>
             <View style={styles.tagsContainer}>
-              {host.interests.map(interest => (
+              {host.interests && host.interests.map(interest => (
                 <View
                   key={interest}
                   style={[styles.tag, { backgroundColor: colors.pastel.mintAqua }]}
@@ -190,7 +191,7 @@ export default function HostProfileScreen({ route, navigation }) {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Languages</Text>
             <View style={styles.tagsContainer}>
-              {host.languages.map(language => (
+              {host.languages && host.languages.map(language => (
                 <View
                   key={language}
                   style={[styles.tag, { backgroundColor: colors.pastel.softLilac }]}
