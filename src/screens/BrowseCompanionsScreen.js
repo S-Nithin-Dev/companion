@@ -147,9 +147,11 @@ export default function BrowseCompanionsScreen({ route, navigation }) {
 
           {/* Activities */}
           <View style={styles.activitiesRow}>
-            {item.activities.slice(0, 3).map(activityId => {
-              // Find the activity object to get its icon
-              const activity = activityTypes.find(a => a.id === activityId);
+            {item.activities && item.activities.slice(0, 3).map(activityObj => {
+              // activityObj is now the full object with id, name, icon from backend
+              const activityId = activityObj.id || activityObj;
+              // Find the activity object to get its icon (fallback for compatibility)
+              const activity = activityObj.name ? activityObj : activityTypes.find(a => a.id === activityId);
               return (
                 <View key={activityId} style={styles.activityTag}>
                   <Text style={styles.activityTagText}>
