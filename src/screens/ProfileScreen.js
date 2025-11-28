@@ -3,7 +3,7 @@
 // User's own profile and settings
 // ============================================
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import {
   View,
   Text,
@@ -11,33 +11,58 @@ import {
   ScrollView,
   TouchableOpacity,
   Image,
-  Switch,       // Toggle switch component
+  Switch,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { colors, spacing, borderRadius, shadows, typography } from '../theme';
+import { AuthContext } from '../context/AuthContext';
+import hostService from '../services/hostService';
 
 export default function ProfileScreen({ navigation }) {
 
   // ============================================
-  // STATE
+  // CONTEXT & STATE
   // ============================================
 
-  // Is user available as a host?
-  const [isHostMode, setIsHostMode] = useState(false);
+  const { user, logout } = useContext(AuthContext);
 
-  // Mock user data (would come from auth/backend)
-  const user = {
-    name: 'Nithin',
-    photo: 'https://i.pravatar.cc/150?img=30',
-    email: 'nithin@example.com',
-    phone: '+91 98765 43210',
-    memberSince: 'Dec 2024',
-    rating: 4.8,
-    completedActivities: 12,
-    reviewsCount: 8,
+  const [isHostMode, setIsHostMode] = useState(false);
+  const [isToggling, setIsToggling] = useState(false);
+  const [hasHostProfile, setHasHostProfile] = useState(false);
+
+  // ============================================
+  // LOAD HOST STATUS
+  // ============================================
+
+  const loadHostStatus = async () => {
+    try {
+      // Try to get user's host profile to check if they have one
+      const hosts = await hostService.getAllHosts({ search: user?.name });
+      const myHost = hosts.find(h => h.name === user?.name);
+
+      if (myHost) {
+        setHasHostProfile(true);
+        setIsHostMode(myHost.is_active || false);
+      }
+    } catch (error) {
+      console.log('No host profile found or error loading:', error.message);
+      setHasHostProfile(false);
+      setIsHostMode(false);
+    }
   };
+
+  // Reload host status when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      if (user) {
+        loadHostStatus();
+      }
+    }, [user])
+  );
 
   // ============================================
   // MENU ITEM COMPONENT
@@ -59,6 +84,46 @@ export default function ProfileScreen({ navigation }) {
   // HANDLERS
   // ============================================
 
+  const handleToggleHostMode = async (newValue) => {
+    // If user doesn't have a host profile, prompt them to create one
+    if (!hasHostProfile) {
+      Alert.alert(
+        'Become a Host',
+        'You need to create a host profile first. Would you like to do that now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Create Profile',
+            onPress: () => navigation.navigate('HostSetup'),
+          },
+        ]
+      );
+      return;
+    }
+
+    // Toggle host mode via API
+    setIsToggling(true);
+    try {
+      const response = await hostService.toggleHostMode();
+      setIsHostMode(response.is_active);
+
+      Alert.alert(
+        'Success',
+        response.message || `Host mode ${response.is_active ? 'activated' : 'deactivated'}`
+      );
+    } catch (error) {
+      console.error('Toggle failed:', error);
+      Alert.alert(
+        'Error',
+        error.response?.data?.error || 'Failed to toggle host mode. Please try again.'
+      );
+      // Revert the switch back
+      setIsHostMode(!newValue);
+    } finally {
+      setIsToggling(false);
+    }
+  };
+
   const handleLogout = () => {
     Alert.alert(
       'Log Out',
@@ -68,9 +133,12 @@ export default function ProfileScreen({ navigation }) {
         {
           text: 'Log Out',
           style: 'destructive',
-          onPress: () => {
-            console.log('User logged out');
-            // In real app: clear auth state, navigate to login
+          onPress: async () => {
+            await logout();
+            navigation.reset({
+              index: 0,
+              routes: [{ name: 'Login' }],
+            });
           },
         },
       ]
@@ -95,9 +163,14 @@ export default function ProfileScreen({ navigation }) {
       {/* PROFILE HEADER */}
       {/* ============================================ */}
       <View style={styles.header}>
-        <Image source={{ uri: user.photo }} style={styles.avatar} />
-        <Text style={styles.name}>{user.name}</Text>
-        <Text style={styles.memberSince}>Member since {user.memberSince}</Text>
+        <Image
+          source={{ uri: user?.photo || 'https://i.pravatar.cc/150?img=30' }}
+          style={styles.avatar}
+        />
+        <Text style={styles.name}>{user?.name || 'Guest'}</Text>
+        <Text style={styles.memberSince}>
+          Member since {new Date().toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+        </Text>
 
         {/* Edit Profile Button */}
         <TouchableOpacity
@@ -113,17 +186,17 @@ export default function ProfileScreen({ navigation }) {
       {/* ============================================ */}
       <View style={styles.statsContainer}>
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>⭐ {user.rating}</Text>
+          <Text style={styles.statValue}>⭐ 0.0</Text>
           <Text style={styles.statLabel}>Rating</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.completedActivities}</Text>
+          <Text style={styles.statValue}>0</Text>
           <Text style={styles.statLabel}>Activities</Text>
         </View>
         <View style={styles.statDivider} />
         <View style={styles.statItem}>
-          <Text style={styles.statValue}>{user.reviewsCount}</Text>
+          <Text style={styles.statValue}>0</Text>
           <Text style={styles.statLabel}>Reviews</Text>
         </View>
       </View>
@@ -136,25 +209,27 @@ export default function ProfileScreen({ navigation }) {
           <View style={styles.hostModeInfo}>
             <Text style={styles.hostModeTitle}>Host Mode</Text>
             <Text style={styles.hostModeSubtitle}>
-              {isHostMode ? 'You are visible to others' : 'Turn on to receive bookings'}
+              {isHostMode
+                ? 'You are visible to others'
+                : hasHostProfile
+                ? 'Turn on to receive bookings'
+                : 'Create a host profile to get started'}
             </Text>
           </View>
-          <Switch
-            value={isHostMode}
-            onValueChange={setIsHostMode}
-            trackColor={{
-              false: colors.gray.medium,
-              true: colors.pastel.mintAqua,
-            }}
-            thumbColor={isHostMode ? colors.primary : colors.white}
-          />
-          {/*
-            Switch component:
-            - value = current state (true/false)
-            - onValueChange = function when toggled
-            - trackColor = background color of track
-            - thumbColor = color of the circle
-          */}
+          {isToggling ? (
+            <ActivityIndicator color={colors.primary} />
+          ) : (
+            <Switch
+              value={isHostMode}
+              onValueChange={handleToggleHostMode}
+              disabled={isToggling}
+              trackColor={{
+                false: colors.gray.medium,
+                true: colors.pastel.mintAqua,
+              }}
+              thumbColor={isHostMode ? colors.primary : colors.white}
+            />
+          )}
         </View>
       </View>
 
@@ -169,13 +244,13 @@ export default function ProfileScreen({ navigation }) {
           <MenuItem
             icon="👤"
             title="Personal Information"
-            subtitle={user.email}
+            subtitle={user?.email || 'Not set'}
             onPress={() => navigation.navigate('EditProfile')}
           />
           <MenuItem
             icon="📱"
             title="Phone Number"
-            subtitle={user.phone}
+            subtitle={user?.phone || 'Not set'}
             onPress={() => navigation.navigate('EditProfile')}
           />
           <MenuItem
