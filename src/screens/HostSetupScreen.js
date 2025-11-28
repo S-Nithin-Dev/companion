@@ -12,11 +12,13 @@ import {
   TouchableOpacity,
   TextInput,
   Alert,
+  ActivityIndicator,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 
 import { colors, spacing, borderRadius, shadows, typography } from '../theme';
 import { activityTypes } from '../data/mockData';
+import hostService from '../services/hostService';
 
 export default function HostSetupScreen({ navigation }) {
 
@@ -38,6 +40,9 @@ export default function HostSetupScreen({ navigation }) {
   const [languages, setLanguages] = useState([]);
 
   const availableLanguages = ['English', 'Hindi', 'Tamil', 'Telugu', 'Kannada', 'Malayalam', 'Bengali', 'Marathi'];
+
+  // Submission state
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // ============================================
   // HELPER FUNCTIONS
@@ -88,26 +93,59 @@ export default function HostSetupScreen({ navigation }) {
   };
 
   // Handle form submission
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const hostData = {
       bio,
-      hourlyRate: parseInt(hourlyRate),
+      hourly_rate: parseInt(hourlyRate),
       activities: selectedActivities,
       languages,
     };
 
-    console.log('Host registration:', hostData);
+    console.log('📝 Creating host profile:', hostData);
 
-    Alert.alert(
-      'Application Submitted!',
-      'We\'ll review your profile and get back to you within 24 hours.',
-      [
+    setIsSubmitting(true);
+
+    try {
+      // Create host profile via API
+      await hostService.createHost(hostData);
+
+      // Automatically activate host mode
+      try {
+        await hostService.toggleHostMode();
+        console.log('✅ Host profile created and activated!');
+      } catch (toggleError) {
+        console.log('⚠️ Profile created but toggle failed:', toggleError.message);
+      }
+
+      Alert.alert(
+        'Success! 🎉',
+        'Your host profile has been created and activated. You are now visible to others!',
+        [
+          {
+            text: 'View Profile',
+            onPress: () => {
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Home' }],
+              });
+              setTimeout(() => navigation.navigate('Profile'), 100);
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('❌ Create host error:', error);
+
+      const errorMessage = error.response?.data?.error || 'Failed to create host profile. Please try again.';
+
+      Alert.alert('Error', errorMessage, [
         {
           text: 'OK',
-          onPress: () => navigation.navigate('Home'),
         },
-      ]
-    );
+      ]);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // ============================================
@@ -295,14 +333,18 @@ export default function HostSetupScreen({ navigation }) {
           <TouchableOpacity
             style={[
               styles.nextButton,
-              !isStepValid() && styles.nextButtonDisabled,
+              (!isStepValid() || isSubmitting) && styles.nextButtonDisabled,
             ]}
             onPress={handleNext}
-            disabled={!isStepValid()}
+            disabled={!isStepValid() || isSubmitting}
           >
-            <Text style={styles.nextButtonText}>
-              {currentStep === 3 ? 'Submit Application' : 'Next'}
-            </Text>
+            {isSubmitting ? (
+              <ActivityIndicator color={colors.white} />
+            ) : (
+              <Text style={styles.nextButtonText}>
+                {currentStep === 3 ? 'Submit Application' : 'Next'}
+              </Text>
+            )}
           </TouchableOpacity>
         </View>
 
